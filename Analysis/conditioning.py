@@ -1,100 +1,58 @@
-import ast
-
-from typing import Dict
-import seaborn as sns
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
+import re
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import train_test_split
+import numpy as np
 
+def basename(path):
+    if pd.isna(path):
+        return ""
+    s = str(path).strip()
+    return re.split(r"[\\/]", s)[-1]
 
-def parse_model_name(model_name: str) -> Dict[str, str]:
-    """Parse model filename to extract metadata"""
-    name = model_name.replace('.pnml', '')
-    parts = name.split('_')
+clean = pd.read_csv("results_clean_replay.csv")
+clean["model"] = clean["model"].apply(basename)
+clean = clean.drop_duplicates(subset=['model'], keep='last')
+tmp = clean["model"].str.replace(".pnml", "", regex=False)
+parts = tmp.str.rsplit("_", n=2, expand=True)
+parts.columns = ["system", "logsize", "algorithm"]
+clean_data_df = pd.concat([parts, clean["simplicity"]], axis=1)
 
-    if len(parts) >= 6:
-        return {
-            'system': parts[0],
-            'logsize': parts[1],
-            'noisetype': parts[2],
-            'noiselevel': float(parts[3]),
-            'iterations': int(parts[4]),
-            'algorithm': parts[5]
-        }
-    else:
-        raise ValueError(f"Cannot parse model name: {model_name}")
+noisy = pd.read_csv("results_noisy_replay.csv")
+noisy["model"] = noisy["model"].apply(basename)
+noisy = noisy.drop_duplicates(subset=['model'], keep='last')
+tmp = noisy["model"].str.replace(".pnml", "", regex=False)
+parts = tmp.str.rsplit("_", n=6, expand=True)
+parts.columns = ["system", "logsize", "noisetype","noiselevel", "iteration", "algorithm"]
+noisy_data_df = pd.concat([parts,noisy["simplicity"]], axis=1)
 
+# Load jaccard data and create logname for merging
+jaccard = pd.read_csv("jaccard.csv", header=None, names=["logname", "sl"])
+jaccard = jaccard.drop_duplicates(subset=['logname'], keep='last')
+jaccard['dl'] = 1 - jaccard['sl']
 
-def parse_similarity_dict(sim_str: str) -> Dict[str, float]:
-    """Parse similarity dictionary string"""
-    try:
-        return ast.literal_eval(sim_str)
-    except:
-        raise ValueError(f"Cannot parse similarity string: {sim_str}")
+# Create logname in noisy_data_df before merging
+noisy_data_df["logname"] = (
+        noisy_data_df["system"].astype(str) + "_" +
+        noisy_data_df["logsize"].astype(str) + "_" +
+        noisy_data_df["noisetype"].astype(str) + "_" +
+        noisy_data_df["noiselevel"].astype(str) + "_" +
+        noisy_data_df["iteration"].astype(str) + ".xes"
+)
 
+# Add dl to noisy_data_df
+noisy_data_df = noisy_data_df.merge(jaccard, on="logname", how="left")
 
-def calculate_structural_distance(row) -> float:
-    """Calculate d_struct from Jaccard similarities"""
-    d_places = 1 - row['place_similarity']
-    d_transitions = 1 - row['transition_similarity']
-    d_arcs = 1 - row['arc_similarity']
-    return (d_places + d_transitions + d_arcs) / 3
+# Now merge with clean data
+merged = noisy_data_df.merge(
+    clean_data_df,
+    on=["system", "logsize", "algorithm"],
+    suffixes=("_noisy", "_clean")
+)
 
-
-def calculate_behavioral_distance(row) -> float:
-    """Calculate d_behav from TAR similarity"""
-    return 1 - row['tar_similarity']
-
-
-def load_and_process_data(csv_path: str) -> pd.DataFrame:
-    """Load CSV and add calculated columns"""
-    # This shows a certain model's structural and behavioral similarity between its clean counterpart
-    df = pd.read_csv(csv_path, header=None, names=['model_name', 'structural_sim', 'tar_similarity'])
-
-    # Parse model names
-    parsed = df['model_name'].apply(parse_model_name)
-    df = pd.concat([df, pd.DataFrame(parsed.tolist())], axis=1)
-
-    # Parse similarity dictionaries
-    sim_dicts = df['structural_sim'].apply(parse_similarity_dict)
-    df['place_similarity'] = sim_dicts.apply(lambda x: x.get('places', 0))
-    df['transition_similarity'] = sim_dicts.apply(lambda x: x.get('transitions', 0))
-    df['arc_similarity'] = sim_dicts.apply(lambda x: x.get('arcs', 0))
-
-    # Calculate distances
-    df['d_struct'] = df.apply(calculate_structural_distance, axis=1)
-    df['d_behav'] = df.apply(calculate_behavioral_distance, axis=1)
-
-    return df
-
-def process_results(results_path: str, jaccard_path: str) -> pd.DataFrame:
-    df = load_and_process_data(results_path)
-    df = df.drop_duplicates(subset=['model_name'], keep='last')
-    parsed = df['model_name'].apply(parse_model_name)
-    meta_df = pd.DataFrame(parsed.tolist()).reset_index(drop=True)
-    df = pd.concat([meta_df, df[['d_struct', 'd_behav']].reset_index(drop=True)], axis=1)
-
-    # Construct logname for matching
-    def make_logname(row):
-        if row['noisetype'] is None or row['iterations'] is None:
-            return f"{row['system']}_{row['logsize']}.xes"
-        else:
-            return f"{row['system']}_{row['logsize']}_{row['noisetype']}_{row['noiselevel']}_{int(row['iterations'])}.xes"
-
-    df['logname'] = df.apply(make_logname, axis=1)
-
-    # Read jaccard.csv (no headers)
-    jaccard_df = pd.read_csv(jaccard_path, header=None, names=['logname', 'sl'])
-    jaccard_df = jaccard_df.drop_duplicates(subset=['logname'], keep='last')
-    jaccard_df['dl'] = 1 - jaccard_df['sl']
-
-    df = df.merge(jaccard_df[['logname', 'dl']], on='logname', how='left')
-    df['dl'] = df['dl'].fillna(0)
-    df = df.drop(columns=['logname'])
-    return df
-
-df_final = process_results("results_similarity.csv", "jaccard.csv")
+merged["dm"] = abs(merged["simplicity_noisy"] - merged["simplicity_clean"]) / merged["simplicity_clean"]
+df_final = merged
 
 def assess_conditioning(df, validation_split=0.3, random_state=42):
     """
@@ -118,7 +76,7 @@ def assess_conditioning(df, validation_split=0.3, random_state=42):
     df_filtered = df[df['dl'] > 0].copy()
 
     # Calculate local conditioning numbers
-    df_filtered['kappa'] = df_filtered['d_struct'] / df_filtered['dl']
+    df_filtered['kappa'] = df_filtered['dm'] / df_filtered['dl']
 
     # Split into estimation and validation sets
     df_est, df_val = train_test_split(
@@ -227,8 +185,8 @@ def plot_conditioning_by_noise_type(df, save_path="."):
 
     # Calculate kappa
     df = df.copy()
-    df = df[(df['dl'] > 0) & np.isfinite(df['d_struct']) & np.isfinite(df['dl'])]
-    df['kappa'] = df['d_struct'] / df['dl']
+    df = df[(df['dl'] > 0) & np.isfinite(df['dm']) & np.isfinite(df['dl'])]
+    df['kappa'] = df['dm'] / df['dl']
     df = df[np.isfinite(df['kappa'])]
 
     # Get unique algorithms
@@ -283,4 +241,46 @@ for algo in df_final['algorithm'].unique():
             print(algo + "," + noise_type)
             df_intermediate = df_intermediate[df_intermediate['noisetype']==noise_type]
             print_conditioning_report(assess_conditioning(df_intermediate))
+plot_conditioning_by_noise_type(df_final)
+
+# Add this at the end of your script, before plot_conditioning_by_noise_type
+
+# Calculate kappa for the final dataframe
+df_export = df_final[df_final['dl'] > 0].copy()
+df_export['kappa'] = df_export['dm'] / df_export['dl']
+
+# Select relevant columns for analysis
+df_export = df_export[['algorithm', 'noisetype', 'dl', 'dm', 'kappa', 'system', 'logsize', 'noiselevel']]
+
+# Sort for easier analysis
+df_export = df_export.sort_values(['algorithm', 'noisetype', 'dl'])
+
+# Export to CSV
+df_export.to_csv('conditioning_data.csv', index=False)
+print(f"\n✓ Exported {len(df_export)} rows to conditioning_data.csv")
+
+# Also create a summary showing max kappa at different dl ranges
+summary_rows = []
+for algo in df_export['algorithm'].unique():
+    for noise in df_export['noisetype'].unique():
+        df_subset = df_export[(df_export['algorithm'] == algo) & (df_export['noisetype'] == noise)]
+        if len(df_subset) > 0:
+            # Bin dl into ranges
+            for dl_min, dl_max in [(0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.0)]:
+                df_range = df_subset[(df_subset['dl'] >= dl_min) & (df_subset['dl'] < dl_max)]
+                if len(df_range) > 0:
+                    summary_rows.append({
+                        'algorithm': algo,
+                        'noisetype': noise,
+                        'dl_range': f'{dl_min}-{dl_max}',
+                        'n_points': len(df_range),
+                        'max_kappa': df_range['kappa'].max(),
+                        'median_kappa': df_range['kappa'].median(),
+                        'mean_kappa': df_range['kappa'].mean()
+                    })
+
+df_summary = pd.DataFrame(summary_rows)
+df_summary.to_csv('conditioning_summary_by_dl_range.csv', index=False)
+print(f"✓ Exported summary to conditioning_summary_by_dl_range.csv")
+
 plot_conditioning_by_noise_type(df_final)
