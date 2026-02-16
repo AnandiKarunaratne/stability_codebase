@@ -1,6 +1,11 @@
 # Conditioning & Stability Analysis of Process Discovery Algorithms
 
 This repository contains the full experimental codebase used to analyze the conditioning and stability of process discovery algorithms.
+The experiments and methodology implemented here are described in the accompanying paper:
+```
+Karunaratne, A., Polyvyanyy, A., Moffat, A.: Conditioning and stability in process discovery. In: CAiSE, Springer (2026), to appear.
+```
+
 The workflow is organized into four modular sub-projects, each responsible for a key stage of the experimental pipeline.
 
 ## Project Structure
