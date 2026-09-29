@@ -19,9 +19,27 @@ parts = tmp.str.rsplit("_", n=2, expand=True)
 parts.columns = ["system", "logsize", "algorithm"]
 clean_data_df = pd.concat([parts, clean["simplicity"]], axis=1)
 
+# reading noisy
 noisy = pd.read_csv("results_noisy_replay.csv")
 noisy["model"] = noisy["model"].apply(basename)
 noisy = noisy.drop_duplicates(subset=['model'], keep='last')
+
+# cleaning up noisy
+clean_f2 = pd.read_csv("results_clean_f2.csv", header=None)
+valid_models = set(clean_f2[1].dropna().astype(str).apply(basename))
+noisy = noisy[noisy["model"].isin(valid_models)]
+tmp = noisy["model"].str.replace(".pnml", "", regex=False)
+noisy[["stem", "algo"]] = tmp.str.rsplit("_", n=1, expand=True)
+
+expected = {"alpha", "heuristics", "inductive"}
+present = noisy.groupby("stem")["algo"].agg(set)
+missing = present.apply(lambda s: expected - s)
+
+incomplete = missing[missing.apply(len) > 0]
+noisy["incomplete"] = noisy["stem"].isin(incomplete.index)
+noisy = noisy[~noisy["incomplete"]].drop(columns=["stem", "algo", "incomplete"])
+print(f"{len(noisy)} rows remain, {noisy['model'].nunique()} unique models")
+
 tmp = noisy["model"].str.replace(".pnml", "", regex=False)
 parts = tmp.str.rsplit("_", n=6, expand=True)
 parts.columns = ["system", "logsize", "noisetype","noiselevel", "iteration", "algorithm"]
@@ -189,6 +207,11 @@ def plot_conditioning_by_noise_type(df, save_path="."):
     df['kappa'] = df['dm'] / df['dl']
     df = df[np.isfinite(df['kappa'])]
 
+    # Shared y-axis limits across all algorithms (log scale needs positive values)
+    kappa_pos = df.loc[df['kappa'] > 0, 'kappa']
+    y_min = kappa_pos.min() / 1.5
+    y_max = kappa_pos.max() * 1.5
+
     # Get unique algorithms
     algorithms = sorted(df['algorithm'].unique())
 
@@ -218,13 +241,11 @@ def plot_conditioning_by_noise_type(df, save_path="."):
                            alpha=0.2, s=30, label=label, color=colors[noise])
 
         ax.set_xlabel('Log Distance ($d_{\mathcal{L}}$)', fontsize=12)
-        ax.set_ylabel('Conditioning Number ($\kappa$)', fontsize=12)
+        ax.set_ylabel('Local Condition Number ($\kappa_{\hat{f}}(L)$)', fontsize=12)
         ax.set_yscale('log')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(y_min, y_max)  # same y-limits for all algorithms
         ax.grid(True, alpha=0.3)
-
-        # Legend at top outside, horizontal
-        # ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.15),
-        #           ncol=len(noise_types), frameon=False)
 
         plt.tight_layout()
 
@@ -283,4 +304,4 @@ df_summary = pd.DataFrame(summary_rows)
 df_summary.to_csv('conditioning_summary_by_dl_range.csv', index=False)
 print(f"✓ Exported summary to conditioning_summary_by_dl_range.csv")
 
-plot_conditioning_by_noise_type(df_final)
+# plot_conditioning_by_noise_type(df_final)
