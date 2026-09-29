@@ -5,26 +5,19 @@ import pandas as pd
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 
+rng = np.random.default_rng(42)
 
 def stability(dm_values, confidence=0.95, coverage=0.95, n_bootstrap=10000):
-    """
-    dm_values: your observed dm values
-    confidence: 95% confidence
-    coverage: want to cover 95% of future observations
-    """
-    percentile = coverage * 100  # 95th percentile
+    percentile = coverage * 100
 
     bootstrap_percentiles = []
     n = len(dm_values)
 
     for _ in range(n_bootstrap):
-        # Resample with replacement
-        sample = np.random.choice(dm_values, size=n, replace=True)
-        # Compute the coverage percentile
+        sample = rng.choice(dm_values, size=n, replace=True)
         p = np.percentile(sample, percentile)
         bootstrap_percentiles.append(p)
 
-    # Upper prediction bound at confidence level
     upper_bound = np.percentile(bootstrap_percentiles, confidence * 100)
 
     return upper_bound
@@ -53,7 +46,7 @@ def plot_stability(df_final, dm, plot_name):
         for nt in df_algo['noisetype'].unique():
             sub_nt = df_algo[df_algo['noisetype'] == nt]
             eps_dict[nt] = stability(sub_nt['dm'], confidence=0.95, coverage=0.95)
-            # print(algo + ", " + nt)
+            print(algo + ", " + nt)
 
         plt.figure(figsize=(5, 4))
 

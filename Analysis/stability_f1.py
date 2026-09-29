@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import re
 from typing import Dict
@@ -60,7 +62,34 @@ def parse_model_name(model_name: str) -> Dict[str, str]:
 
 def process_results(results_path: str, jaccard_path: str) -> pd.DataFrame:
     df = pd.read_csv(results_path, header=None, names=['system', 'modelname', 'precision', 'recall', 'size'])
+
     df = df.drop_duplicates(subset=['modelname'], keep='last')
+    clean_replay = pd.read_csv("results_clean_replay.csv") # header: log,model,precision,recall,simplicity
+    noisy_replay = pd.read_csv("results_noisy_replay.csv") # header: noisy_log,clean_log,model,precision_noisy,recall_noisy,precision_clean,recall_clean,simplicity
+
+    clean_models = set(clean_replay["model"].dropna().astype(str).map(os.path.basename))
+    noisy_models = set(noisy_replay["model"].dropna().astype(str).map(os.path.basename))
+    valid_models = clean_models | noisy_models
+    df = df.drop_duplicates(subset=["modelname"], keep="last")
+    df = df[df["modelname"].isin(valid_models)].copy()
+
+    # split "<stem>_<algo>.pnml" into stem and algo
+    parts = (
+        df["modelname"]
+        .str.removesuffix(".pnml")
+        .str.rsplit("_", n=1, expand=True)
+        .reindex(columns=[0, 1])
+    )
+    df["stem"], df["algo"] = parts[0], parts[1]
+
+    # keep only stems that have all three algorithms
+    expected = {"alpha", "heuristics", "inductive"}
+    has_all = df.groupby("stem")["algo"].agg(set).apply(expected.issubset)
+    complete_stems = has_all[has_all].index
+
+    noisy = df[df["stem"].isin(complete_stems)].drop(columns=["stem", "algo"])
+    print(f"{len(noisy)} rows remain, {noisy['modelname'].nunique()} unique models")
+
     df = df[['modelname', 'precision', 'recall']].reset_index(drop=True)
     parsed = df['modelname'].apply(parse_model_name)
     meta_df = pd.DataFrame(parsed.tolist()).reset_index(drop=True)

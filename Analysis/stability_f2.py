@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import re
 from typing import Dict
@@ -52,7 +54,24 @@ def parse_model_name(model_name: str) -> Dict[str, str]:
 
 def process_results(results_path: str, jaccard_path: str) -> pd.DataFrame:
     df = pd.read_csv(results_path)
+
     df = df.drop_duplicates(subset=['model'], keep='last')
+
+    clean_f2 = pd.read_csv("results_clean_f2.csv", header=None)
+    valid_models = set(clean_f2[1].dropna().astype(str))
+    df = df[df["model"].isin(valid_models)]
+    tmp = df["model"].str.replace(".pnml", "", regex=False)
+    df[["stem", "algo"]] = tmp.str.rsplit("_", n=1, expand=True)
+
+    expected = {"alpha", "heuristics", "inductive"}
+    present = df.groupby("stem")["algo"].agg(set)
+    missing = present.apply(lambda s: expected - s)
+
+    incomplete = missing[missing.apply(len) > 0]
+    df["incomplete"] = df["stem"].isin(incomplete.index)
+    df = df[~df["incomplete"]].drop(columns=["stem", "algo", "incomplete"])
+    print(f"{len(df)} rows remain, {df['model'].nunique()} unique models")
+
     df = df[['model', 'precision_clean', 'recall_clean', 'precision_noisy', 'recall_noisy']].reset_index(drop=True)
     parsed = df['model'].apply(parse_model_name)
     meta_df = pd.DataFrame(parsed.tolist()).reset_index(drop=True)
