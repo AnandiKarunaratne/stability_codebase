@@ -53,8 +53,8 @@ eps_data = {
 
 algo_row = {'Alpha': 0, 'Heuristics': 1, 'Inductive': 2}
 
-cmap = sns.color_palette("inferno", 5)
-colors = {noise: cmap[i] for i, noise in enumerate(noise_types)}
+palette = [ "#00368f", "#9d28b7", "#f620a1", "#ff8700", "#ffdd3a" ]
+colors = {noise: palette[i] for i, noise in enumerate(noise_types)}
 
 pis = np.linspace(0, 1, 401)
 
@@ -153,9 +153,9 @@ def make_plot(p, fname, all_deltas, y_range):
         alpha=0.8
     )
 
-    ax.set_xlabel(r"$\pi$")
+    ax.set_xlabel(r"$\pi$", fontsize=15)
     ax.set_ylabel(
-        r"$\Delta = C_p(\mathrm{Inductive}) - C_p(\mathrm{Heuristics})$"
+        r"$\Delta = C_p(\mathrm{Inductive}) - C_p(\mathrm{Heuristics})$", fontsize=15
     )
 
     ax.set_xlim(0, 1)

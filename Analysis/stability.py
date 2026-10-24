@@ -34,7 +34,9 @@ def plot_stability(df_final, dm, plot_name):
     # Define noise types in desired order
     noise_types = ['ABSENCE', 'INSERTION', 'ORDERING', 'SUBSTITUTION', 'MIXED']
     display_names = ['Absence', 'Insertion', 'Ordering', 'Substitution', 'Mixed']
-    palette = sns.color_palette("inferno", 5)
+    # palette = sns.color_palette("inferno", 5)
+    palette = [ "#00368f", "#9d28b7", "#f620a1", "#ff8700", "#ffdd3a" ]
+    # colors = {noise: palette[i] for i, noise in enumerate(noise_types)}
     color_dict = dict(zip(noise_types, palette))
 
     # --- Plot per algorithm ---
@@ -73,8 +75,8 @@ def plot_stability(df_final, dm, plot_name):
                 )
 
         plt.ylim(-0.1, 1.1)
-        plt.xlabel("Noise Type")
-        plt.ylabel("$d_{\mathcal{M}}$")
+        plt.xlabel("Noise Type", fontsize=15)
+        plt.ylabel("$d_{\mathcal{M}}$", fontsize=15)
 
         noise_patches = [Patch(facecolor=color_dict[nt], label=display_names[i], alpha=0.6)
                          for i, nt in enumerate(noise_types)]

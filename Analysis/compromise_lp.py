@@ -84,8 +84,8 @@ def plot_for_noise_type(noise_type):
             linewidth=2.4
         )
 
-    ax.set_xlabel(r"$\pi$")
-    ax.set_ylabel(r"$C_2(\hat{f}_i)$")
+    ax.set_xlabel(r"$\pi$", fontsize=15)
+    ax.set_ylabel(r"$C_2(\hat{f}_i)$", fontsize=15)
 
     ax.set_xlim(0, 1)
     ax.set_ylim(-0.05, 1.05)
