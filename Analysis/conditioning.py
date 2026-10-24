@@ -220,8 +220,35 @@ def plot_conditioning_by_noise_type(df, save_path="."):
     noise_labels = ['Absence', 'Insertion', 'Ordering', 'Substitution', 'Mixed']
 
     # Use viridis colormap
-    cmap = sns.color_palette("inferno", 5)
-    colors = {noise: cmap[i] for i, noise in enumerate(noise_types)}
+    # cmap = sns.color_palette("inferno", 5)
+    # colors = {noise: cmap[i] for i, noise in enumerate(noise_types)}
+
+
+
+    # palette = [ "#00a5d3", "#9734c2", "#e11d48", "#f0b618", "#52a52b" ]
+    palette = [ "#00368f", "#9d28b7", "#f620a1", "#ff8700", "#ffdd3a" ]
+    colors = {noise: palette[i] for i, noise in enumerate(noise_types)}
+
+    # Create a separate legend PDF
+    fig, ax = plt.subplots(figsize=(10, 1))
+
+    for noise, label in zip(noise_types, noise_labels):
+        ax.scatter([], [], label=label, color=colors[noise], s=30)
+
+    ax.legend(
+        loc='center',
+        frameon=False,
+        fontsize=12,
+        ncol=5
+    )
+    ax.axis('off')
+
+    plt.savefig(
+        f"{save_path}/conditioning_legend.pdf",
+        bbox_inches='tight',
+        dpi=300
+    )
+    plt.close(fig)
 
     # Create a separate plot for each algorithm
     for algo in algorithms:
@@ -238,10 +265,10 @@ def plot_conditioning_by_noise_type(df, save_path="."):
                 df_noise = df_noise.sort_values('dl')
 
                 ax.scatter(df_noise['dl'], df_noise['kappa'],
-                           alpha=0.2, s=30, label=label, color=colors[noise])
+                           alpha=0.5, s=10, label=label, color=colors[noise])
 
-        ax.set_xlabel('Log Distance ($d_{\mathcal{L}}$)', fontsize=12)
-        ax.set_ylabel('Local Condition Number ($\kappa_{\hat{f}}(L)$)', fontsize=12)
+        ax.set_xlabel('Log Distance ($d_{\mathcal{L}}$)', fontsize=15)
+        ax.set_ylabel('Local Condition Number ($\kappa$)', fontsize=15)
         ax.set_yscale('log')
         ax.set_xlim(0, 1)
         ax.set_ylim(y_min, y_max)  # same y-limits for all algorithms
